@@ -476,6 +476,39 @@ class RepeatSingleModifier: public Modifier {
     }
 };
 
+//only play the current track and then stop playing, regardless the mode that is configured originally
+class SingleTrackModifier : public Modifier {
+  public:
+    virtual void loop() {}
+    virtual bool handleNext() {
+      Serial.println(F("== SingleTrackModifier::handleNext() -> Stop playing"));
+      setstandbyTimer();
+      //mp3.sleep(); // Je nach Modul kommt es nicht mehr zurück aus dem Sleep!
+      activeModifier = NULL;
+      delete this;
+      return true;
+    }
+
+    SingleTrackModifier() {
+      Serial.println(F("=== SingleTrackModifier()"));
+    }
+
+    virtual bool handleNextButton()       {
+      Serial.println(F("== SingleTrackModifier::handleNextButton() -> LOCKED!"));
+      return true;
+    }
+
+    virtual bool handlePreviousButton() {
+      Serial.println(F("== SingleTrackModifier::handlePreviousButton() -> LOCKED!"));
+      return true;
+    }
+
+    virtual uint8_t getActive() {
+      Serial.println(F("== SingleTrackModifier::getActive()"));
+      return 7;
+    }
+};
+
 // An modifier can also do somethings in addition to the modified action
 // by returning false (not handled) at the end
 // This simple FeedbackModifier will tell the volume before changing it and
@@ -1199,7 +1232,7 @@ void adminMenu(bool fromCard = false) {
     tempCard.nfcFolderSettings.folder = 0;
     tempCard.nfcFolderSettings.special = 0;
     tempCard.nfcFolderSettings.special2 = 0;
-    tempCard.nfcFolderSettings.mode = voiceMenu(6, 970, 970, false, false, 0, true);
+    tempCard.nfcFolderSettings.mode = voiceMenu(7, 970, 970, false, false, 0, true);
 
     if (tempCard.nfcFolderSettings.mode != 0) {
       if (tempCard.nfcFolderSettings.mode == 1) {
@@ -1676,7 +1709,7 @@ bool readCard(nfcTagObject * nfcTag) {
         case 4: activeModifier = new ToddlerMode(); break;
         case 5: activeModifier = new KindergardenMode(); break;
         case 6: activeModifier = new RepeatSingleModifier(); break;
-
+        case 7: activeModifier = new SingleTrackModifier(); break;
       }
       delay(2000);
       return false;
