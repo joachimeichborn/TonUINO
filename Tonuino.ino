@@ -478,19 +478,32 @@ class RepeatSingleModifier: public Modifier {
 
 //only play the current track and then stop playing, regardless the mode that is configured originally
 class SingleTrackModifier : public Modifier {
+  private:
+    unsigned long sleepAfterMillis = 0;
+
   public:
     virtual void loop() {}
+
     virtual bool handleNext() {
-      Serial.println(F("== SingleTrackModifier::handleNext() -> Stop playing"));
-      setstandbyTimer();
-      //mp3.sleep(); // Je nach Modul kommt es nicht mehr zurück aus dem Sleep!
-      activeModifier = NULL;
-      delete this;
-      return true;
+      Serial.println(F("== SingleTrackModifier::handleNext()"));
+      if (millis() < this->sleepAfterMillis) {
+        Serial.println(F("Minimal playtime not reached, continue playing"));
+        return false;
+      }
+      else {
+        Serial.println(F("Stop playing"));
+        setstandbyTimer();
+        //mp3.sleep(); // Je nach Modul kommt es nicht mehr zurück aus dem Sleep!
+        delete(activeModifier);
+        activeModifier = NULL;
+        delete this;
+        return true;
+      }
     }
 
     SingleTrackModifier() {
       Serial.println(F("=== SingleTrackModifier()"));
+      this->sleepAfterMillis = millis() + 10L * 60L * 1000L;
     }
 
     virtual bool handleNextButton()       {
