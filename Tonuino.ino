@@ -21,7 +21,7 @@
 //#define FIVEBUTTONS
 
 // uncomment the below line to enable a power led (by default at pin D5)
-//#define POWERLED
+#define POWERLED
 
 // uncomment the below line to enable a status led (by default at pin D6)
 //#define STATUSLED
@@ -593,11 +593,13 @@ class SingleTrackModifier : public Modifier {
 
     virtual bool handleNextButton()       {
       Serial.println(F("== SingleTrackModifier::handleNextButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
 
     virtual bool handlePreviousButton() {
       Serial.println(F("== SingleTrackModifier::handlePreviousButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
 
@@ -1305,10 +1307,11 @@ bool loadLastCard(nfcTagObject * nfcTag) {
     myFolder = &nfcTag->nfcFolderSettings;
     Serial.print(F("Loaded last card with folder "));
     Serial.println(myFolder->folder);
-
+    statusLedController.accepted();
     return true;
   }
 
+  statusLedController.denied();
   return false;
 }
 
