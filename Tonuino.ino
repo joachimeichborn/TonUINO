@@ -972,10 +972,17 @@ void loop() {
 
 #ifdef FIVEBUTTONS
     if (!isPlaying() && buttonFour.pressedFor(LONG_PRESS) && buttonFive.pressedFor(LONG_PRESS)) {
+#else
+    if (!isPlaying() && upButton.pressedFor(LONG_PRESS) && downButton.pressedFor(LONG_PRESS)) {
+#endif
       // continue with last card
       do {
         readButtons();
+#ifdef FIVEBUTTONS
       } while (buttonFour.isPressed() || buttonFive.isPressed());
+#else
+      } while (upButton.isPressed() || downButton.isPressed());
+#endif
       readButtons();
 
       if (loadLastCard(&myCard) == true) {
@@ -985,7 +992,6 @@ void loop() {
       }
       break;
     }
-#endif
 
     if (pauseButton.wasReleased()) {
       if (activeModifier != NULL)
@@ -1026,7 +1032,7 @@ void loop() {
       ignorePauseButton = true;
     }
 
-    if (upButton.pressedFor(LONG_PRESS)) {
+    if (upButton.pressedFor(LONG_PRESS) && !downButton.isPressed()) {
 #ifndef FIVEBUTTONS
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
@@ -1052,7 +1058,7 @@ void loop() {
       ignoreUpButton = false;
     }
 
-    if (downButton.pressedFor(LONG_PRESS)) {
+    if (downButton.pressedFor(LONG_PRESS) && !upButton.isPressed()) {
 #ifndef FIVEBUTTONS
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
@@ -1079,7 +1085,7 @@ void loop() {
       ignoreDownButton = false;
     }
 #ifdef FIVEBUTTONS
-    if (buttonFour.wasReleased()) {
+    if (buttonFour.wasReleased() && !buttonFive.isPressed()) {
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
           volumeUpButton();
@@ -1092,7 +1098,7 @@ void loop() {
         playShortCut(1);
       }
     }
-    if (buttonFive.wasReleased()) {
+    if (buttonFive.wasReleased() && !buttonFive.isPressed()) {
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
           volumeDownButton();
