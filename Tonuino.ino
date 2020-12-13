@@ -20,6 +20,9 @@
 // uncomment the below line to enable five button support
 //#define FIVEBUTTONS
 
+// uncomment the below line to enable a power led (by default at pin D5)
+//#define POWERLED
+
 // uncomment the below line to enable a status led (by default at pin D6)
 //#define STATUSLED
 
@@ -131,7 +134,7 @@ unsigned long sleepAtMillis = 0;
 static uint16_t _lastTrackFinished;
 StatusLedController statusLedController = StatusLedController();
 
-static void nextTrack(uint16_t track);
+static void nextTrack();
 uint8_t voiceMenu(int numberOfOptions, int startMessage, int messageOffset,
                   bool preview = false, int previewFromFolder = 0, int defaultValue = 0, bool exitWithLongPress = false);
 bool isPlaying();
@@ -160,10 +163,16 @@ class Mp3Notify {
       Serial.println(action);
     }
     static void OnPlayFinished(DfMp3_PlaySources source, uint16_t track) {
-      //      Serial.print("Track beendet");
-      //      Serial.println(track);
+      Serial.print("Track beendet ");
+      Serial.println(track);
       //      delay(100);
-      nextTrack(track);
+      if (track == _lastTrackFinished) {
+        Serial.println(F("Ignoring duplicate OnPlayFinished event"));
+        return;
+      }
+
+      _lastTrackFinished = track;
+      nextTrack();
     }
     static void OnPlaySourceOnline(DfMp3_PlaySources source) {
       PrintlnSourceAction(source, "online");
@@ -552,6 +561,52 @@ class RepeatSingleModifier: public Modifier {
     }
 };
 
+//only play the current track and then stop playing, regardless the mode that is configured originally
+class SingleTrackModifier : public Modifier {
+  private:
+    unsigned long sleepAfterMillis = 0;
+
+  public:
+    virtual void loop() {}
+
+    virtual bool handleNext() {
+      Serial.println(F("== SingleTrackModifier::handleNext()"));
+      if (millis() < this->sleepAfterMillis) {
+        Serial.println(F("Minimal playtime not reached, continue playing"));
+        return false;
+      }
+      else {
+        Serial.println(F("Stop playing"));
+        setstandbyTimer();
+        //mp3.sleep(); // Je nach Modul kommt es nicht mehr zurück aus dem Sleep!
+        delete(activeModifier);
+        activeModifier = NULL;
+        delete this;
+        return true;
+      }
+    }
+
+    SingleTrackModifier() {
+      Serial.println(F("=== SingleTrackModifier()"));
+      this->sleepAfterMillis = millis() + 10L * 60L * 1000L;
+    }
+
+    virtual bool handleNextButton()       {
+      Serial.println(F("== SingleTrackModifier::handleNextButton() -> LOCKED!"));
+      return true;
+    }
+
+    virtual bool handlePreviousButton() {
+      Serial.println(F("== SingleTrackModifier::handlePreviousButton() -> LOCKED!"));
+      return true;
+    }
+
+    virtual uint8_t getActive() {
+      Serial.println(F("== SingleTrackModifier::getActive()"));
+      return 7;
+    }
+};
+
 // An modifier can also do somethings in addition to the modified action
 // by returning false (not handled) at the end
 // This simple FeedbackModifier will tell the volume before changing it and
@@ -587,16 +642,10 @@ class FeedbackModifier: public Modifier {
 };
 
 // Leider kann das Modul selbst keine Queue abspielen, daher müssen wir selbst die Queue verwalten
-static void nextTrack(uint16_t track) {
-  Serial.println(track);
+static void nextTrack() {
   if (activeModifier != NULL)
     if (activeModifier->handleNext() == true)
       return;
-
-  if (track == _lastTrackFinished) {
-    return;
-  }
-  _lastTrackFinished = track;
 
   if (knownCard == false)
     // Wenn eine neue Karte angelernt wird soll das Ende eines Tracks nicht
@@ -726,6 +775,10 @@ MFRC522::StatusCode status;
 #define buttonFivePin A4
 #endif
 
+#ifdef POWERLED
+#define powerLedPin 5
+#endif
+
 #define LONG_PRESS 1000
 
 Button pauseButton(buttonPause);
@@ -762,6 +815,9 @@ void disablestandbyTimer() {
 void checkStandbyAtMillis() {
   if (sleepAtMillis != 0 && millis() > sleepAtMillis) {
     Serial.println(F("=== power off!"));
+#ifdef POWERLED
+    digitalWrite(powerLedPin, LOW);
+#endif
     // enter sleep state
     digitalWrite(shutdownPin, HIGH);
     delay(500);
@@ -795,6 +851,10 @@ void waitForTrackToFinish() {
 }
 
 void setup() {
+#ifdef POWERLED
+  pinMode(powerLedPin, OUTPUT);
+  digitalWrite(powerLedPin, HIGH);
+#endif
 
   Serial.begin(115200); // Es gibt ein paar Debug Ausgaben über die serielle Schnittstelle
 
@@ -915,7 +975,7 @@ void nextButton() {
       return;
 
   statusLedController.accepted();
-  nextTrack(random(65536));
+  nextTrack();
   delay(1000);
 }
 
@@ -1055,6 +1115,29 @@ void loop() {
       break;
     }
 
+#ifdef FIVEBUTTONS
+    if (!isPlaying() && buttonFour.pressedFor(LONG_PRESS) && buttonFive.pressedFor(LONG_PRESS)) {
+#else
+    if (!isPlaying() && upButton.pressedFor(LONG_PRESS) && downButton.pressedFor(LONG_PRESS)) {
+#endif
+      // continue with last card
+      do {
+        readButtons();
+#ifdef FIVEBUTTONS
+      } while (buttonFour.isPressed() || buttonFive.isPressed());
+#else
+      } while (upButton.isPressed() || downButton.isPressed());
+#endif
+      readButtons();
+
+      if (loadLastCard(&myCard) == true) {
+        if (myCard.cookie == cardCookie && myCard.nfcFolderSettings.folder != 0 && myCard.nfcFolderSettings.mode != 0) {
+          playFolder();
+        }
+      }
+      break;
+    }
+
     if (pauseButton.wasReleased()) {
       if (activeModifier != NULL)
         if (activeModifier->handlePause() == true)
@@ -1097,7 +1180,7 @@ void loop() {
       ignorePauseButton = true;
     }
 
-    if (upButton.pressedFor(LONG_PRESS)) {
+    if (upButton.pressedFor(LONG_PRESS) && !downButton.isPressed()) {
 #ifndef FIVEBUTTONS
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
@@ -1123,7 +1206,7 @@ void loop() {
       ignoreUpButton = false;
     }
 
-    if (downButton.pressedFor(LONG_PRESS)) {
+    if (downButton.pressedFor(LONG_PRESS) && !upButton.isPressed()) {
 #ifndef FIVEBUTTONS
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
@@ -1150,7 +1233,7 @@ void loop() {
       ignoreDownButton = false;
     }
 #ifdef FIVEBUTTONS
-    if (buttonFour.wasReleased()) {
+    if (buttonFour.wasReleased() && !buttonFive.isPressed()) {
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
           volumeUpButton();
@@ -1163,7 +1246,7 @@ void loop() {
         playShortCut(1);
       }
     }
-    if (buttonFive.wasReleased()) {
+    if (buttonFive.wasReleased() && !buttonFive.isPressed()) {
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
           volumeDownButton();
@@ -1203,6 +1286,30 @@ void loop() {
   }
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
+}
+
+bool loadLastCard(nfcTagObject * nfcTag) {
+  Serial.println(F("Loading last folder card from EEPROM"));
+  nfcTagObject tempCard;
+
+  int address = sizeof(folderSettings::folder) * 100 + sizeof(adminSettings);
+  EEPROM.get(address, tempCard);
+
+  // only care about folder cards
+  if (tempCard.nfcFolderSettings.folder != 0) {
+    if (activeModifier != NULL  && activeModifier->handleRFID(&tempCard)) {
+      return false;
+    }
+
+    memcpy(nfcTag, &tempCard, sizeof(nfcTagObject));
+    myFolder = &nfcTag->nfcFolderSettings;
+    Serial.print(F("Loaded last card with folder "));
+    Serial.println(myFolder->folder);
+
+    return true;
+  }
+
+  return false;
 }
 
 void adminMenu(bool fromCard = false) {
@@ -1291,7 +1398,7 @@ void adminMenu(bool fromCard = false) {
     tempCard.nfcFolderSettings.folder = 0;
     tempCard.nfcFolderSettings.special = 0;
     tempCard.nfcFolderSettings.special2 = 0;
-    tempCard.nfcFolderSettings.mode = voiceMenu(6, 970, 970, false, false, 0, true);
+    tempCard.nfcFolderSettings.mode = voiceMenu(7, 970, 970, false, false, 0, true);
 
     if (tempCard.nfcFolderSettings.mode != 0) {
       if (tempCard.nfcFolderSettings.mode == 1) {
@@ -1769,7 +1876,7 @@ bool readCard(nfcTagObject * nfcTag) {
         case 4: activeModifier = new ToddlerMode(); break;
         case 5: activeModifier = new KindergardenMode(); break;
         case 6: activeModifier = new RepeatSingleModifier(); break;
-
+        case 7: activeModifier = new SingleTrackModifier(); break;
       }
       delay(2000);
       return false;
@@ -1779,6 +1886,8 @@ bool readCard(nfcTagObject * nfcTag) {
       Serial.println( nfcTag->nfcFolderSettings.folder);
       myFolder = &nfcTag->nfcFolderSettings;
       Serial.println( myFolder->folder);
+      int address = sizeof(folderSettings::folder) * 100 + sizeof(adminSettings);
+      EEPROM.put(address, tempCard);
     }
     return true;
   }
