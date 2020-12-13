@@ -1128,7 +1128,6 @@ void playShortCut(uint8_t shortCut) {
   }
   else {
     Serial.println(F("Shortcut not configured!"));
-    statusLedController.denied();
   }
 }
 
