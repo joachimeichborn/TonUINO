@@ -21,7 +21,10 @@
 //#define FIVEBUTTONS
 
 // uncomment the below line to enable a power led (by default at pin D5)
-//#define POWERLED
+#define POWERLED
+
+// uncomment the below line to enable a status led (by default at pin D6)
+#define STATUSLED
 
 static const uint32_t cardCookie = 322417479;
 
@@ -67,11 +70,71 @@ struct adminSettings {
   uint8_t adminMenuPin[4];
 };
 
+#ifdef STATUSLED
+#define statusLedPin 6
+#endif
+
+class StatusLedController {
+  private:
+    const unsigned int shortBlinkDuration = 200;
+    boolean on = false;
+    unsigned long offTime = 0;
+    unsigned long onTime = UINT32_MAX;
+
+  public:
+    StatusLedController() {
+#ifdef STATUSLED
+      Serial.println(F("Initializing status led"));
+      pinMode(statusLedPin, OUTPUT);
+#endif
+    }
+
+    void accepted() {
+      this->activate(300);
+    }
+
+    void denied() {
+      this->activate(this->shortBlinkDuration, true);
+    }
+
+    void error() {
+        this->activate(5000);
+    }
+
+    void checkState() {
+#ifdef STATUSLED
+      if (this->on && offTime < millis()) {
+        digitalWrite(statusLedPin, LOW);
+        on = false;
+      }
+      else if (!this->on && onTime < millis()) {
+        digitalWrite(statusLedPin, HIGH);
+        on = true;
+        offTime = millis() + (this->shortBlinkDuration);
+        onTime = UINT32_MAX;
+      }
+#endif
+    }
+
+  private:
+    void activate(unsigned long duration, boolean setOnTime = false) {
+#ifdef STATUSLED
+      offTime = millis() + duration;
+      if (setOnTime) {
+        onTime = offTime + 100;
+      }
+      digitalWrite(statusLedPin, HIGH);
+      on = true;
+#endif
+    }
+};
+
 adminSettings mySettings;
 nfcTagObject myCard;
 folderSettings *myFolder;
 unsigned long sleepAtMillis = 0;
 static uint16_t _lastTrackFinished;
+StatusLedController statusLedController = StatusLedController();
 
 static void nextTrack();
 uint8_t voiceMenu(int numberOfOptions, int startMessage, int messageOffset,
@@ -93,6 +156,7 @@ class Mp3Notify {
       Serial.println();
       Serial.print("Com Error ");
       Serial.println(errorCode);
+      statusLedController.error();
     }
     static void PrintlnSourceAction(DfMp3_PlaySources source, const char* action) {
       if (source & DfMp3_PlaySources_Sd) Serial.print("SD Karte ");
@@ -341,26 +405,32 @@ class Locked: public Modifier {
   public:
     virtual bool handlePause()     {
       Serial.println(F("== Locked::handlePause() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleNextButton()       {
       Serial.println(F("== Locked::handleNextButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handlePreviousButton() {
       Serial.println(F("== Locked::handlePreviousButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleVolumeUp()   {
       Serial.println(F("== Locked::handleVolumeUp() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleVolumeDown() {
       Serial.println(F("== Locked::handleVolumeDown() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleRFID(nfcTagObject *newCard) {
       Serial.println(F("== Locked::handleRFID() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     Locked(void) {
@@ -377,22 +447,27 @@ class ToddlerMode: public Modifier {
   public:
     virtual bool handlePause()     {
       Serial.println(F("== ToddlerMode::handlePause() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleNextButton()       {
       Serial.println(F("== ToddlerMode::handleNextButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handlePreviousButton() {
       Serial.println(F("== ToddlerMode::handlePreviousButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleVolumeUp()   {
       Serial.println(F("== ToddlerMode::handleVolumeUp() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleVolumeDown() {
       Serial.println(F("== ToddlerMode::handleVolumeDown() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     ToddlerMode(void) {
@@ -434,14 +509,17 @@ class KindergardenMode: public Modifier {
     //    }
     virtual bool handleNextButton()       {
       Serial.println(F("== KindergardenMode::handleNextButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handlePreviousButton() {
       Serial.println(F("== KindergardenMode::handlePreviousButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
     virtual bool handleRFID(nfcTagObject * newCard) { // lot of work to do!
       Serial.println(F("== KindergardenMode::handleRFID() -> queued!"));
+      statusLedController.accepted();
       this->nextCard = *newCard;
       this->cardQueued = true;
       if (!isPlaying()) {
@@ -517,11 +595,13 @@ class SingleTrackModifier : public Modifier {
 
     virtual bool handleNextButton()       {
       Serial.println(F("== SingleTrackModifier::handleNextButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
 
     virtual bool handlePreviousButton() {
       Serial.println(F("== SingleTrackModifier::handlePreviousButton() -> LOCKED!"));
+      statusLedController.denied();
       return true;
     }
 
@@ -843,6 +923,7 @@ void setup() {
   if (digitalRead(buttonPause) == LOW && digitalRead(buttonUp) == LOW &&
       digitalRead(buttonDown) == LOW) {
     Serial.println(F("Reset -> EEPROM wird gelöscht"));
+    statusLedController.accepted();
     for (int i = 0; i < EEPROM.length(); i++) {
       EEPROM.update(i, 0);
     }
@@ -870,6 +951,7 @@ void volumeUpButton() {
       return;
 
   Serial.println(F("=== volumeUp()"));
+  statusLedController.accepted();
   if (volume < mySettings.maxVolume) {
     mp3.increaseVolume();
     volume++;
@@ -883,6 +965,7 @@ void volumeDownButton() {
       return;
 
   Serial.println(F("=== volumeDown()"));
+  statusLedController.accepted();
   if (volume > mySettings.minVolume) {
     mp3.decreaseVolume();
     volume--;
@@ -895,6 +978,7 @@ void nextButton() {
     if (activeModifier->handleNextButton() == true)
       return;
 
+  statusLedController.accepted();
   nextTrack();
   delay(1000);
 }
@@ -904,6 +988,7 @@ void previousButton() {
     if (activeModifier->handlePreviousButton() == true)
       return;
 
+  statusLedController.accepted();
   previousTrack();
   delay(1000);
 }
@@ -996,19 +1081,23 @@ void playShortCut(uint8_t shortCut) {
   Serial.println(F("=== playShortCut()"));
   Serial.println(shortCut);
   if (mySettings.shortCuts[shortCut].folder != 0) {
+    statusLedController.accepted();
     myFolder = &mySettings.shortCuts[shortCut];
     playFolder();
     disablestandbyTimer();
     delay(1000);
   }
-  else
+  else {
     Serial.println(F("Shortcut not configured!"));
+    statusLedController.denied();
+  }
 }
 
 void loop() {
   do {
     checkStandbyAtMillis();
     mp3.loop();
+    statusLedController.checkState();
 
     // Modifier : WIP!
     if (activeModifier != NULL) {
@@ -1058,6 +1147,7 @@ void loop() {
         if (activeModifier->handlePause() == true)
           return;
       if (ignorePauseButton == false)
+        statusLedController.accepted();
         if (isPlaying()) {
           mp3.pause();
           setstandbyTimer();
@@ -1072,6 +1162,8 @@ void loop() {
       if (activeModifier != NULL)
         if (activeModifier->handlePause() == true)
           return;
+
+      statusLedController.accepted();
       if (isPlaying()) {
         uint8_t advertTrack;
         if (myFolder->mode == 3 || myFolder->mode == 9) {
@@ -1177,10 +1269,13 @@ void loop() {
 
   // RFID Karte wurde aufgelegt
 
-  if (!mfrc522.PICC_ReadCardSerial())
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    statusLedController.denied();
     return;
+  }
 
   if (readCard(&myCard) == true) {
+    statusLedController.accepted();
     if (myCard.cookie == cardCookie && myCard.nfcFolderSettings.folder != 0 && myCard.nfcFolderSettings.mode != 0) {
       playFolder();
     }
@@ -1214,10 +1309,11 @@ bool loadLastCard(nfcTagObject * nfcTag) {
     myFolder = &nfcTag->nfcFolderSettings;
     Serial.print(F("Loaded last card with folder "));
     Serial.println(myFolder->folder);
-
+    statusLedController.accepted();
     return true;
   }
 
+  statusLedController.denied();
   return false;
 }
 
@@ -1225,6 +1321,7 @@ void adminMenu(bool fromCard = false) {
   disablestandbyTimer();
   mp3.pause();
   Serial.println(F("=== adminMenu()"));
+  statusLedController.accepted();
   knownCard = false;
   if (fromCard == false) {
     // Admin menu has been locked - it still can be trigged via admin card
@@ -1743,6 +1840,7 @@ bool readCard(nfcTagObject * nfcTag) {
     }
 
     if (tempCard.nfcFolderSettings.folder == 0) {
+      statusLedController.accepted();
       if (activeModifier != NULL) {
         if (activeModifier->getActive() == tempCard.nfcFolderSettings.mode) {
           activeModifier = NULL;
