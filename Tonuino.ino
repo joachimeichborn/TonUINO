@@ -20,6 +20,9 @@
 // uncomment the below line to enable five button support
 //#define FIVEBUTTONS
 
+// uncomment the below line to enable remote control (by default at pin D8)
+#define IRCONTROL
+
 // uncomment the below line to enable a power led (by default at pin D5)
 #define POWERLED
 
@@ -135,6 +138,25 @@ folderSettings *myFolder;
 unsigned long sleepAtMillis = 0;
 static uint16_t _lastTrackFinished;
 StatusLedController statusLedController = StatusLedController();
+
+#ifdef IRCONTROL
+//the pin to which the data lane for the IR sensor is connected
+#define IRMP_INPUT_PIN 8
+//switch to 1 to get proper protocol names for unknown codes
+#define IRMP_PROTOCOL_NAMES 0
+//define the protocols that should be supported
+#define IRMP_SUPPORT_DENON_PROTOCOL 1
+
+#include <irmp.c.h>
+IRMP_DATA irmp_data;
+
+//has to be adjusted to the codes for the individual remote
+#define PAUSE_CODE 0x1E8
+#define STOP_CODE 0x2E8
+#define PLAY_CODE 0xE8
+#define PREVIOUS_CODE 0x268
+#define NEXT_CODE 0x68
+#endif
 
 static void nextTrack();
 uint8_t voiceMenu(int numberOfOptions, int startMessage, int messageOffset,
@@ -908,6 +930,11 @@ void setup() {
     key.keyByte[i] = 0xFF;
   }
 
+#ifdef IRCONTROL
+  Serial.println(F("Initializing IR sensor"));
+  irmp_init();
+#endif
+
   pinMode(buttonPause, INPUT_PULLUP);
   pinMode(buttonUp, INPUT_PULLUP);
   pinMode(buttonDown, INPUT_PULLUP);
@@ -1093,6 +1120,41 @@ void playShortCut(uint8_t shortCut) {
   }
 }
 
+#ifdef IRCONTROL
+void checkIrSignal() {
+  if (irmp_get_data(&irmp_data)) {
+    //skip repretetive commands
+    if (!(irmp_data.flags & IRMP_FLAG_REPETITION)) {
+      switch (irmp_data.command) {
+        case PAUSE_CODE:
+        case STOP_CODE:
+          Serial.println("PAUSE received");
+          mp3.pause();
+          setstandbyTimer();
+          break;
+        case PLAY_CODE:
+          Serial.println("PLAY received");
+          mp3.start();
+          disablestandbyTimer();
+          break;
+        case PREVIOUS_CODE:
+          Serial.println("PREVIOUS received");
+          previousButton();
+          break;
+        case NEXT_CODE:
+          Serial.println("NEXT received");
+          nextButton();
+          break;
+        default:
+           Serial.print(F("Unknown IR code received "));
+          irmp_result_print(&irmp_data);
+          break;
+      }
+    }
+  }
+}
+#endif
+
 void loop() {
   do {
     checkStandbyAtMillis();
@@ -1103,6 +1165,10 @@ void loop() {
     if (activeModifier != NULL) {
       activeModifier->loop();
     }
+
+#ifdef IRCONTROL
+    checkIrSignal();
+#endif
 
     // Buttons werden nun über JS_Button gehandelt, dadurch kann jede Taste
     // doppelt belegt werden
