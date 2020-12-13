@@ -24,7 +24,7 @@
 #define POWERLED
 
 // uncomment the below line to enable a status led (by default at pin D6)
-//#define STATUSLED
+#define STATUSLED
 
 static const uint32_t cardCookie = 322417479;
 
@@ -101,7 +101,8 @@ class StatusLedController {
         this->activate(5000);
     }
 
-    boolean checkState() {
+    void checkState() {
+#ifdef STATUSLED
       if (this->on && offTime < millis()) {
         digitalWrite(statusLedPin, LOW);
         on = false;
@@ -112,6 +113,7 @@ class StatusLedController {
         offTime = millis() + (this->shortBlinkDuration);
         onTime = UINT32_MAX;
       }
+#endif
     }
 
   private:
