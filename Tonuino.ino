@@ -1030,6 +1030,29 @@ void loop() {
       break;
     }
 
+#ifdef FIVEBUTTONS
+    if (!isPlaying() && buttonFour.pressedFor(LONG_PRESS) && buttonFive.pressedFor(LONG_PRESS)) {
+#else
+    if (!isPlaying() && upButton.pressedFor(LONG_PRESS) && downButton.pressedFor(LONG_PRESS)) {
+#endif
+      // continue with last card
+      do {
+        readButtons();
+#ifdef FIVEBUTTONS
+      } while (buttonFour.isPressed() || buttonFive.isPressed());
+#else
+      } while (upButton.isPressed() || downButton.isPressed());
+#endif
+      readButtons();
+
+      if (loadLastCard(&myCard) == true) {
+        if (myCard.cookie == cardCookie && myCard.nfcFolderSettings.folder != 0 && myCard.nfcFolderSettings.mode != 0) {
+          playFolder();
+        }
+      }
+      break;
+    }
+
     if (pauseButton.wasReleased()) {
       if (activeModifier != NULL)
         if (activeModifier->handlePause() == true)
@@ -1069,7 +1092,7 @@ void loop() {
       ignorePauseButton = true;
     }
 
-    if (upButton.pressedFor(LONG_PRESS)) {
+    if (upButton.pressedFor(LONG_PRESS) && !downButton.isPressed()) {
 #ifndef FIVEBUTTONS
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
@@ -1095,7 +1118,7 @@ void loop() {
       ignoreUpButton = false;
     }
 
-    if (downButton.pressedFor(LONG_PRESS)) {
+    if (downButton.pressedFor(LONG_PRESS) && !upButton.isPressed()) {
 #ifndef FIVEBUTTONS
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
@@ -1122,7 +1145,7 @@ void loop() {
       ignoreDownButton = false;
     }
 #ifdef FIVEBUTTONS
-    if (buttonFour.wasReleased()) {
+    if (buttonFour.wasReleased() && !buttonFive.isPressed()) {
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
           volumeUpButton();
@@ -1135,7 +1158,7 @@ void loop() {
         playShortCut(1);
       }
     }
-    if (buttonFive.wasReleased()) {
+    if (buttonFive.wasReleased() && !buttonFive.isPressed()) {
       if (isPlaying()) {
         if (!mySettings.invertVolumeButtons) {
           volumeDownButton();
@@ -1172,6 +1195,30 @@ void loop() {
   }
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
+}
+
+bool loadLastCard(nfcTagObject * nfcTag) {
+  Serial.println(F("Loading last folder card from EEPROM"));
+  nfcTagObject tempCard;
+
+  int address = sizeof(folderSettings::folder) * 100 + sizeof(adminSettings);
+  EEPROM.get(address, tempCard);
+
+  // only care about folder cards
+  if (tempCard.nfcFolderSettings.folder != 0) {
+    if (activeModifier != NULL  && activeModifier->handleRFID(&tempCard)) {
+      return false;
+    }
+
+    memcpy(nfcTag, &tempCard, sizeof(nfcTagObject));
+    myFolder = &nfcTag->nfcFolderSettings;
+    Serial.print(F("Loaded last card with folder "));
+    Serial.println(myFolder->folder);
+
+    return true;
+  }
+
+  return false;
 }
 
 void adminMenu(bool fromCard = false) {
@@ -1746,6 +1793,8 @@ bool readCard(nfcTagObject * nfcTag) {
       Serial.println( nfcTag->nfcFolderSettings.folder);
       myFolder = &nfcTag->nfcFolderSettings;
       Serial.println( myFolder->folder);
+      int address = sizeof(folderSettings::folder) * 100 + sizeof(adminSettings);
+      EEPROM.put(address, tempCard);
     }
     return true;
   }
