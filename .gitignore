@@ -29,3 +29,7 @@ Temporary Items
 
 # TonUINO
 /tools/*.pyc
+
+# IDE
+/.idea/
+/build/

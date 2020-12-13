@@ -879,7 +879,13 @@ void waitForTrackToFinish() {
 void setup() {
 #ifdef POWERLED
   pinMode(powerLedPin, OUTPUT);
+#ifndef STATUSLED
   digitalWrite(powerLedPin, HIGH);
+#endif
+#ifdef STATUSLED
+  pinMode(statusLedPin, OUTPUT);
+  digitalWrite(statusLedPin, HIGH);
+#endif
 #endif
 
   Serial.begin(115200); // Es gibt ein paar Debug Ausgaben über die serielle Schnittstelle
@@ -960,6 +966,12 @@ void setup() {
 
   // Start Shortcut "at Startup" - e.g. Welcome Sound
   playShortCut(3);
+
+  //switch status led off and power led on once setup is completed
+#if defined(POWERLED) && defined(STATUSLED)
+  digitalWrite(statusLedPin, LOW);
+  digitalWrite(powerLedPin, HIGH);
+#endif
 }
 
 void readButtons() {
