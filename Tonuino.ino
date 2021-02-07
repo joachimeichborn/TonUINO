@@ -720,7 +720,7 @@ static void nextTrack() {
     if (currentTrack != numTracksInFolder) {
       currentTrack = currentTrack + 1;
       Serial.print(F("Hörbuch Modus ist aktiv -> nächster Track und "
-                     "Fortschritt speichern"));
+                     "Fortschritt speichern "));
       Serial.println(currentTrack);
       mp3.playFolderTrack(myFolder->folder, currentTrack);
       // Fortschritt im EEPROM abspeichern
@@ -771,6 +771,38 @@ static void previousTrack() {
     if (currentTrack != 1) {
       currentTrack = currentTrack - 1;
     }
+    mp3.playFolderTrack(myFolder->folder, currentTrack);
+    // Fortschritt im EEPROM abspeichern
+    EEPROM.update(myFolder->folder, currentTrack);
+  }
+  delay(1000);
+}
+
+static void playFirstTrack() {
+  Serial.println(F("=== playFirstTrack()"));
+  if (myFolder->mode == 1 || myFolder->mode == 7) {
+      Serial.println(F("Hörspielmodus ist aktiv -> Track von vorne spielen"));
+      mp3.playFolderTrack(myFolder->folder, currentTrack);
+  }
+  if (myFolder->mode == 2 || myFolder->mode == 8) {
+    Serial.println(F("Albummodus ist aktiv -> erster Track"));
+    currentTrack = firstTrack;
+    mp3.playFolderTrack(myFolder->folder, currentTrack);
+  }
+  if (myFolder->mode == 3 || myFolder->mode == 9) {
+    Serial.print(F("Party Modus ist aktiv -> springe an den Anfang"));
+    currentTrack = 1;
+    Serial.println(queue[currentTrack - 1]);
+    mp3.playFolderTrack(myFolder->folder, queue[currentTrack - 1]);
+  }
+  if (myFolder->mode == 4) {
+    Serial.println(F("Einzel Modus aktiv -> Track von vorne spielen"));
+    mp3.playFolderTrack(myFolder->folder, currentTrack);
+  }
+  if (myFolder->mode == 5) {
+    Serial.println(F("Hörbuch Modus ist aktiv -> erster Track und "
+                     "Fortschritt speichern"));
+    currentTrack = 1;
     mp3.playFolderTrack(myFolder->folder, currentTrack);
     // Fortschritt im EEPROM abspeichern
     EEPROM.update(myFolder->folder, currentTrack);
@@ -904,7 +936,7 @@ void setup() {
   Serial.println(F("|_   _|___ ___|  |  |     |   | |     |"));
   Serial.println(F("  | | | . |   |  |  |-   -| | | |  |  |"));
   Serial.println(F("  |_| |___|_|_|_____|_____|_|___|_____|\n"));
-  Serial.println(F("TonUINO Version 2.1"));
+  Serial.println(F("TonUINO Version 2.1.2"));
   Serial.println(F("created by Thorsten Voß and licensed under GNU/GPL."));
   Serial.println(F("Information and contribution at https://tonuino.de.\n"));
 
@@ -1079,6 +1111,7 @@ void playFolder() {
     if (currentTrack == 0 || currentTrack > numTracksInFolder) {
       currentTrack = 1;
     }
+    Serial.println(currentTrack);
     mp3.playFolderTrack(myFolder->folder, currentTrack);
   }
   // Spezialmodus Von-Bin: Hörspiel: eine zufällige Datei aus dem Ordner
@@ -1223,7 +1256,7 @@ void loop() {
       if (activeModifier != NULL)
         if (activeModifier->handlePause() == true)
           return;
-      if (ignorePauseButton == false)
+      if (ignorePauseButton == false) {
         statusLedController.accepted();
         if (isPlaying()) {
           mp3.pause();
@@ -1233,6 +1266,7 @@ void loop() {
           mp3.start();
           disablestandbyTimer();
         }
+      }
       ignorePauseButton = false;
     } else if (pauseButton.pressedFor(LONG_PRESS) &&
                ignorePauseButton == false) {
@@ -1256,7 +1290,8 @@ void loop() {
         mp3.playAdvertisement(advertTrack);
       }
       else {
-        playShortCut(0);
+        //playShortCut(0);
+        playFirstTrack();
       }
       ignorePauseButton = true;
     }
