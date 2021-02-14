@@ -189,7 +189,6 @@ class Mp3Notify {
     static void OnPlayFinished(DfMp3_PlaySources source, uint16_t track) {
       Serial.print("Track beendet ");
       Serial.println(track);
-      //      delay(100);
       if (track == _lastTrackFinished) {
         Serial.println(F("Ignoring duplicate OnPlayFinished event"));
         return;
@@ -732,7 +731,6 @@ static void nextTrack() {
       setstandbyTimer();
     }
   }
-  delay(500);
 }
 
 static void previousTrack() {
@@ -775,7 +773,6 @@ static void previousTrack() {
     // Fortschritt im EEPROM abspeichern
     EEPROM.update(myFolder->folder, currentTrack);
   }
-  delay(1000);
 }
 
 static void playFirstTrack() {
@@ -807,7 +804,6 @@ static void playFirstTrack() {
     // Fortschritt im EEPROM abspeichern
     EEPROM.update(myFolder->folder, currentTrack);
   }
-  delay(1000);
 }
 
 // MFRC522
@@ -949,7 +945,7 @@ void setup() {
   // activate standby timer
   setstandbyTimer();
 
-  // DFPlayer Mini initialisieren
+  Serial.println(F("Initializing DFPlayer"));
   mp3.begin();
   // Zwei Sekunden warten bis der DFPlayer Mini initialisiert ist
   delay(2000);
@@ -959,7 +955,7 @@ void setup() {
   // Fix für das Problem mit dem Timeout (ist jetzt in Upstream daher nicht mehr nötig!)
   //mySoftwareSerial.setTimeout(10000);
 
-  // NFC Leser initialisieren
+  Serial.println(F("Initializing NFC Reader"));
   SPI.begin();        // Init SPI bus
   mfrc522.PCD_Init(); // Init MFRC522
   mfrc522
@@ -1173,26 +1169,31 @@ void checkIrSignal() {
         case PAUSE_CODE:
         case STOP_CODE:
           Serial.println("PAUSE received");
+          statusLedController.accepted();
           mp3.pause();
           setstandbyTimer();
           break;
         case PLAY_CODE:
           Serial.println("PLAY received");
+          statusLedController.accepted();
           mp3.start();
           disablestandbyTimer();
           break;
         case PREVIOUS_CODE:
           Serial.println("PREVIOUS received");
+          statusLedController.accepted();
           previousButton();
           break;
         case NEXT_CODE:
           Serial.println("NEXT received");
+          statusLedController.accepted();
           nextButton();
           break;
         default:
            Serial.print(F("Unknown IR code received "));
-          irmp_result_print(&irmp_data);
-          break;
+           statusLedController.denied();
+           irmp_result_print(&irmp_data);
+           break;
       }
     }
   }
